@@ -1,0 +1,103 @@
+plugins {
+    id 'java-library'
+    id 'eclipse'
+    id 'maven-publish'
+    id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.8'
+}
+
+group = 'com.senkoauhlink'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    maven {
+        name = "papermc-repo"
+        url = "https://repo.papermc.io/repository/maven-public/"
+    }
+}
+
+dependencies {
+    compileOnly("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
+    annotationProcessor("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
+}
+
+def targetJavaVersion = 17
+def compilerJavaVersion = 21
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(compilerJavaVersion)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release.set(targetJavaVersion)
+}
+
+def templateSource = file('src/main/templates')
+def templateDest = layout.buildDirectory.dir('generated/sources/templates')
+def generateTemplates = tasks.register('generateTemplates', Copy) { task ->
+    def props = ['version': project.version]
+    task.inputs.properties props
+
+    task.from templateSource
+    task.into templateDest
+    task.expand props
+}
+
+sourceSets.main.java.srcDir(generateTemplates.map { it.outputs })
+
+tasks.named("jar") {
+    archiveFileName.set("SAL-API.jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// Копирует собранный SAL-API.jar (провайдер API) в папку plugins тестового сервера.
+def serverPluginsDir = "C:\\Users\\Аня\\Desktop\\Server Senko\\Vel\\plugins"
+tasks.register("copyToServer", Copy) {
+    dependsOn tasks.named("jar")
+    from tasks.named("jar")
+    into serverPluginsDir
+}
+
+def ideaExt = project.extensions.findByName('idea')
+if (ideaExt != null && ideaExt.project != null) {
+    ideaExt.project.settings.taskTriggers.afterSync generateTemplates
+}
+def eclipseExt = project.extensions.findByName('eclipse')
+if (eclipseExt != null) {
+    eclipseExt.synchronizationTasks(generateTemplates)
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+
+            pom {
+                name = 'SenkoAuthLinkAPI-Velosity'
+                description = 'API for SenkoAuthLink authentication plugin on Velocity proxy'
+                url = 'https://github.com/senkoan/senkoauthlinkapi-velosity'
+
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = 'SenkoSan'
+                        name = 'SenkoSan'
+                    }
+                }
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = 'localRepo'
+            url = layout.buildDirectory.dir('repo')
+        }
+    }
+}
